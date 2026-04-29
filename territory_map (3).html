@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sales Territory Map — Indonesia</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --navy:   #0f1f3d; --navy2: #1a3260;
+    --accent: #3b82f6; --accent2: #60a5fa;
+    --surf:   #ffffff; --surf2: #f4f6fb;
+    --border: #e2e8f0; --text: #1e293b; --muted: #64748b;
+    --success:#22c55e; --warn: #f59e0b; --danger: #ef4444;
+    --r: 10px;
+  }
+  html, body { height: 100%; font-family: 'DM Sans', sans-serif; background: var(--surf2); color: var(--text); }
+
+  /* HEADER */
+  #header {
+    height: 56px; background: var(--navy);
+    display: flex; align-items: center; padding: 0 20px; gap: 14px;
+    position: relative; z-index: 1100;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.25);
+  }
+  #header-logo {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: var(--accent); display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  #header h1 { font-size: 15px; font-weight: 600; color: #fff; flex: 1; letter-spacing: -0.2px; }
+  #header-meta { font-size: 11px; color: rgba(255,255,255,0.45); font-family: 'DM Mono', monospace; white-space: nowrap; }
+  #tile-btns { display: flex; gap: 4px; }
+  .tbtn {
+    font-size: 11px; font-weight: 500; padding: 4px 11px; border-radius: 6px; cursor: pointer;
+    border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.7);
+    transition: all 0.15s; font-family: 'DM Sans', sans-serif;
+  }
+  .tbtn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+  .tbtn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  #upload-btn {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; font-weight: 500; font-family: 'DM Sans', sans-serif;
+    padding: 6px 14px; border-radius: 7px; cursor: pointer;
+    background: rgba(59,130,246,0.18); border: 1px solid rgba(59,130,246,0.4);
+    color: var(--accent2); transition: all 0.15s; white-space: nowrap;
+  }
+  #upload-btn:hover { background: rgba(59,130,246,0.30); color: #fff; }
+  #file-input { display: none; }
+
+  /* LAYOUT */
+  #main { display: flex; height: calc(100vh - 56px); }
+
+  /* SIDEBAR */
+  #sidebar {
+    width: 280px; flex-shrink: 0;
+    background: var(--surf); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  #sidebar-inner { flex: 1; overflow-y: auto; padding: 16px; }
+  .sid-label {
+    font-size: 10px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.7px; color: var(--muted); margin-bottom: 8px;
+  }
+  .sid-section { margin-bottom: 20px; }
+
+  /* stats */
+  #stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat-card { background: var(--surf2); border-radius: var(--r); padding: 10px 12px; border: 1px solid var(--border); }
+  .stat-card .val { font-size: 22px; font-weight: 600; color: var(--navy); line-height: 1; }
+  .stat-card .lbl { font-size: 10px; color: var(--muted); margin-top: 3px; }
+
+  /* legend */
+  #legend-list { display: flex; flex-direction: column; gap: 5px; }
+  .leg-item {
+    display: flex; align-items: center; gap: 9px;
+    padding: 8px 10px; border-radius: 8px; cursor: pointer;
+    border: 1px solid transparent; transition: all 0.12s;
+  }
+  .leg-item:hover { background: var(--surf2); border-color: var(--border); }
+  .leg-item.faded { opacity: 0.35; }
+  .leg-dot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
+  .leg-name { flex: 1; font-size: 12px; font-weight: 500; }
+  .leg-sub  { font-size: 10px; color: var(--muted); }
+  .leg-count {
+    font-size: 10px; font-weight: 600; background: var(--surf2);
+    border: 1px solid var(--border); border-radius: 12px; padding: 1px 7px; color: var(--muted);
+  }
+
+  /* unmatched */
+  #unmatched-box {
+    background: #fffbeb; border: 1px solid #fcd34d;
+    border-radius: var(--r); padding: 10px 12px; display: none;
+  }
+  #unmatched-box .warn-title { font-size: 11px; font-weight: 600; color: #92400e; margin-bottom: 5px; }
+  #unmatched-box ul { padding-left: 14px; }
+  #unmatched-box li { font-size: 11px; color: #78350f; margin: 2px 0; }
+
+  /* DROP ZONE */
+  #drop-zone {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 16px; padding: 32px;
+    border: 2px dashed var(--border); border-radius: 16px; margin: 20px;
+    background: var(--surf2); cursor: pointer; transition: all 0.15s;
+  }
+  #drop-zone.drag-over { border-color: var(--accent); background: rgba(59,130,246,0.04); }
+  #drop-zone svg { opacity: 0.3; }
+  #drop-zone h2 { font-size: 15px; font-weight: 500; color: var(--muted); text-align: center; }
+  #drop-zone p  { font-size: 12px; color: #94a3b8; text-align: center; line-height: 1.6; }
+  #drop-zone-btn {
+    font-size: 13px; font-weight: 500; font-family: 'DM Sans', sans-serif;
+    padding: 9px 20px; border-radius: 8px; cursor: pointer;
+    background: var(--navy); color: #fff; border: none; transition: background 0.15s;
+  }
+  #drop-zone-btn:hover { background: var(--navy2); }
+
+  /* MAP */
+  #map-wrap { flex: 1; position: relative; display: none; }
+  #map { width: 100%; height: 100%; }
+
+  #map-pill {
+    position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+    background: rgba(255,255,255,0.96); backdrop-filter: blur(6px);
+    border-radius: 20px; padding: 6px 18px;
+    font-size: 12px; color: var(--muted);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.14);
+    z-index: 800; white-space: nowrap; pointer-events: none;
+    border: 1px solid var(--border);
+  }
+  #map-pill b { color: var(--navy); }
+
+  #loading {
+    position: absolute; inset: 0;
+    background: rgba(244,246,251,0.90);
+    display: none; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 12px; z-index: 900; font-size: 13px; color: var(--muted);
+  }
+  #loading.show { display: flex; }
+  .spinner {
+    width: 34px; height: 34px;
+    border: 3px solid var(--border); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .leaflet-popup-content-wrapper { border-radius: 10px !important; box-shadow: 0 4px 24px rgba(15,31,61,0.12) !important; }
+  .popup-name { font-weight: 600; font-size: 13px; color: var(--navy); margin-bottom: 5px; }
+  .popup-row  { font-size: 11px; color: var(--muted); margin: 2px 0; }
+  .popup-row b { color: var(--text); }
+  .popup-badge {
+    display: inline-block; margin-top: 7px; border-radius: 20px; padding: 3px 12px;
+    font-size: 10px; font-weight: 600; color: #fff; letter-spacing: 0.3px;
+  }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <div id="header-logo">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+    </svg>
+  </div>
+  <h1>Sales Territory Map <span style="font-weight:300;opacity:.5;">— Indonesia</span></h1>
+  <span id="header-meta">Kota / Kabupaten level</span>
+  <div id="tile-btns">
+    <button class="tbtn on" onclick="switchTile('light',this)">Light</button>
+    <button class="tbtn"    onclick="switchTile('dark',this)">Dark</button>
+    <button class="tbtn"    onclick="switchTile('osm',this)">OSM</button>
+  </div>
+  <button id="upload-btn" onclick="document.getElementById('file-input').click()">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+    </svg>
+    Upload Excel
+  </button>
+  <input type="file" id="file-input" accept=".xlsx,.xls,.csv">
+</div>
+
+<div id="main">
+  <div id="sidebar">
+    <div id="sidebar-inner">
+      <div class="sid-section">
+        <div class="sid-label">Ringkasan</div>
+        <div id="stat-grid">
+          <div class="stat-card"><div class="val" id="s-mapped">—</div><div class="lbl">Wilayah dipetakan</div></div>
+          <div class="stat-card"><div class="val" id="s-sales">—</div><div class="lbl">Salesperson</div></div>
+          <div class="stat-card"><div class="val" id="s-total">—</div><div class="lbl">Total area</div></div>
+          <div class="stat-card"><div class="val" id="s-miss">—</div><div class="lbl">Tidak cocok</div></div>
+        </div>
+      </div>
+      <div class="sid-section">
+        <div class="sid-label">Salesperson</div>
+        <div id="legend-list"></div>
+      </div>
+      <div class="sid-section">
+        <div id="unmatched-box">
+          <div class="warn-title">⚠ Wilayah tidak ditemukan</div>
+          <ul id="unmatched-list"></ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="drop-zone" onclick="document.getElementById('file-input').click()">
+    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/>
+      <line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/>
+    </svg>
+    <h2>Upload file Excel wilayah sales</h2>
+    <p>
+      Format kolom yang didukung:<br>
+      <strong>Nama</strong> | <strong>Homebase</strong> | <strong>Area Kerja 1</strong> ... <strong>Area Kerja N</strong><br><br>
+      Atau kolom tunggal: <strong>Salesperson / District / Wilayah</strong>
+    </p>
+    <button id="drop-zone-btn">Pilih File Excel</button>
+    <p style="margin-top:4px;font-size:11px;">atau drag &amp; drop file ke sini</p>
+  </div>
+
+  <div id="map-wrap">
+    <div id="map"></div>
+    <div id="map-pill">Memuat peta...</div>
+    <div id="loading"><div class="spinner"></div><span id="loading-msg">Memuat data wilayah...</span></div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+// ── TILES ─────────────────────────────────────────────────────────────────────
+const TILES = {
+  light: { url:'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', sub:'abcd', op:0.72 },
+  dark:  { url:'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',  sub:'abcd', op:0.82 },
+  osm:   { url:'https://tile.openstreetmap.org/{z}/{x}/{y}.png',                 sub:'abc',  op:0.65 }
+};
+const ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>';
+const PALETTE = ['#e6194b','#3cb44b','#4363d8','#f58231','#911eb4','#08b0a0','#f032e6','#9A6324','#0080ff','#e6ac00','#ff6b6b','#51cf66'];
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+let map, tileLayer, geojsonLayer, geoData, geoNameKey;
+let currentTile = 'light';
+let salesGroups = [];
+let hiddenGroups = new Set();
+
+// ── SMART NORMALIZATION ───────────────────────────────────────────────────────
+// Strips all known Indonesian district prefixes and cleans the string
+function clean(s) {
+  if (!s) return '';
+  return s.toString()
+    .toUpperCase()
+    .trim()
+    // Remove all common prefixes (order matters — longer first)
+    .replace(/^(KOTAMADYA|KOTA MADYA|KABUPATEN|KOTA|KAB\.|KAB)\s+/g, '')
+    .replace(/^(KOTA|KAB)\s+/g, '')           // second pass in case double prefix
+    .replace(/[^A-Z0-9\s]/g, ' ')             // remove special chars
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Build a lookup map: cleanedName → entry
+// Each entry stored under MULTIPLE keys to maximise hit chance
+let districtLookup = {};
+
+function buildLookup(groups) {
+  districtLookup = {};
+  groups.forEach(g => {
+    g.areas.forEach(area => {
+      const entry = {
+        salesperson: g.name, homebase: g.homebase,
+        color: g.color, originalName: area, matched: false
+      };
+      // Key 1: fully cleaned (no prefix, no special chars)
+      districtLookup[clean(area)] = entry;
+      // Key 2: just uppercase + trim (keep prefix, remove special chars)
+      const upper = area.toUpperCase().trim().replace(/[^A-Z0-9\s]/g,' ').replace(/\s+/g,' ').trim();
+      districtLookup[upper] = entry;
+      // Key 3: original with KOTA prefix stripped
+      districtLookup[upper.replace(/^(KOTA|KABUPATEN|KAB\.?|KOTAMADYA)\s+/,'')] = entry;
+    });
+  });
+}
+
+// Smart lookup: tries multiple normalizations against the GeoJSON feature name
+function lookupFeature(rawGeoName) {
+  if (!rawGeoName) return null;
+
+  const candidates = [
+    rawGeoName,                                                          // as-is
+    rawGeoName.toUpperCase().trim(),                                     // uppercase
+    rawGeoName.toUpperCase().trim().replace(/[^A-Z0-9\s]/g,' ').replace(/\s+/g,' ').trim(), // cleaned
+    clean(rawGeoName),                                                   // fully cleaned
+  ];
+
+  for (const c of candidates) {
+    if (districtLookup[c]) return districtLookup[c];
+  }
+
+  // Last resort: check if any lookup key is contained in the geo name or vice versa
+  const geoClean = clean(rawGeoName);
+  for (const [key, val] of Object.entries(districtLookup)) {
+    if (!key) continue;
+    if (geoClean === key) return val;
+    // substring match (e.g. "JAKARTA BARAT" contains "BARAT" — too loose, skip)
+    // Only do exact word-boundary match for short keys ≥ 4 chars
+    if (key.length >= 4 && geoClean === key) return val;
+  }
+  return null;
+}
+
+// ── AUTO-DETECT which GeoJSON property holds the district name ────────────────
+// After loading GeoJSON, scan first 200 features and pick the key whose values
+// best match our district lookup. This handles any GeoJSON schema automatically.
+const CANDIDATE_KEYS = ['Kab_Kota','KABKOT','NAMOBJ','name','NAME_2','Nama',
+                        'kabupaten','WADMKK','REMARK','district','DISTNAME','KAB_KOTA'];
+
+function detectNameKey(features) {
+  if (!features.length) return 'name';
+
+  const sample = features.slice(0, 200);
+  let bestKey = null, bestScore = -1;
+
+  // Also include any key that looks like a name field
+  const props = features[0].properties || {};
+  const allKeys = [...new Set([...CANDIDATE_KEYS, ...Object.keys(props)])];
+
+  for (const key of allKeys) {
+    const values = sample.map(f => (f.properties || {})[key]).filter(Boolean);
+    if (!values.length) continue;
+
+    // Score = how many values match something in our lookup
+    let hits = 0;
+    values.forEach(v => { if (lookupFeature(String(v))) hits++; });
+    const score = hits / values.length;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestKey = key;
+    }
+  }
+
+  console.log('Auto-detected name key:', bestKey, 'score:', (bestScore*100).toFixed(1)+'%');
+  return bestKey || 'name';
+}
+
+// ── EXCEL PARSING ─────────────────────────────────────────────────────────────
+function parseExcel(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb   = XLSX.read(e.target.result, { type: 'binary' });
+      const ws   = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      if (!rows.length) { alert('Sheet kosong atau tidak bisa dibaca.'); return; }
+      processData(rows);
+    } catch(err) { alert('Gagal membaca file: ' + err.message); }
+  };
+  reader.readAsBinaryString(file);
+}
+
+function processData(rows) {
+  const headers = Object.keys(rows[0]);
+
+  const nameCol = headers.find(h => /^(nama|name|salesperson|sales|pic|staff|karyawan)$/i.test(h.trim())) || headers[0];
+  const homeCol = headers.find(h => /^(homebase|home.?base|domisili|base|kota.?asal)$/i.test(h.trim()));
+  const areaColsWide = headers.filter(h => /area.?kerja|area\s*\d|wilayah\s*\d|territory\s*\d|district\s*\d/i.test(h));
+  const areaColNarrow = !areaColsWide.length
+    ? headers.find(h => /^(wilayah|area|territory|district|kota|kabupaten|coverage)$/i.test(h.trim()))
+    : null;
+
+  if (!areaColsWide.length && !areaColNarrow) {
+    alert('Kolom area tidak ditemukan. Pastikan ada kolom "Area Kerja 1", "Wilayah", atau "District".');
+    return;
+  }
+
+  salesGroups = [];
+
+  if (areaColsWide.length) {
+    rows.forEach((row, i) => {
+      const name  = String(row[nameCol] || '').trim();
+      if (!name) return;
+      const hbase = homeCol ? String(row[homeCol] || '').trim() : '';
+      const areas = areaColsWide.map(c => String(row[c] || '').trim()).filter(Boolean);
+      if (areas.length) salesGroups.push({ name, homebase: hbase, areas, color: PALETTE[i % PALETTE.length] });
+    });
+  } else {
+    const grouped = {};
+    rows.forEach(row => {
+      const name = String(row[nameCol] || '').trim();
+      const area = String(row[areaColNarrow] || '').trim();
+      const hbase = homeCol ? String(row[homeCol] || '').trim() : '';
+      if (!name || !area) return;
+      if (!grouped[name]) grouped[name] = { name, homebase: hbase, areas: [] };
+      grouped[name].areas.push(area);
+    });
+    Object.values(grouped).forEach((g, i) => salesGroups.push({ ...g, color: PALETTE[i % PALETTE.length] }));
+  }
+
+  if (!salesGroups.length) { alert('Tidak ada data yang bisa dibaca.'); return; }
+
+  buildLookup(salesGroups);
+  hiddenGroups.clear();
+  showMap();
+}
+
+// ── MAP ───────────────────────────────────────────────────────────────────────
+function showMap() {
+  document.getElementById('drop-zone').style.display = 'none';
+  document.getElementById('map-wrap').style.display  = 'block';
+  if (!map) initMap();
+  Object.values(districtLookup).forEach(e => e.matched = false);
+  setLoading(true, 'Memuat batas wilayah Indonesia...');
+  if (geoData) renderGeoJSON();
+  else fetchGeoJSON();
+}
+
+function initMap() {
+  map = L.map('map').setView([-6.2, 106.8], 9);
+  tileLayer = L.tileLayer(TILES[currentTile].url, {
+    attribution: ATTR, subdomains: TILES[currentTile].sub, maxZoom: 19
+  }).addTo(map);
+}
+
+const GEO_URLS = [
+  'https://raw.githubusercontent.com/superpikar/indonesia-geojson/master/indonesia-edit.geojson',
+  'https://raw.githubusercontent.com/ans-4175/peta-indonesia-geojson/master/indonesia-kota.geojson'
+];
+
+async function fetchGeoJSON() {
+  for (const url of GEO_URLS) {
+    try {
+      setLoading(true, 'Mengunduh data GeoJSON...');
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      geoData = await res.json();
+      renderGeoJSON();
+      return;
+    } catch(e) { console.warn('GeoJSON failed:', url, e.message); }
+  }
+  setLoading(false);
+  document.getElementById('map-pill').textContent = '⚠ Gagal memuat GeoJSON. Cek koneksi internet.';
+}
+
+function renderGeoJSON() {
+  setLoading(true, 'Mencocokkan wilayah...');
+
+  // Auto-detect the best property key for district names
+  geoNameKey = detectNameKey(geoData.features);
+
+  if (geojsonLayer) { map.removeLayer(geojsonLayer); geojsonLayer = null; }
+
+  geojsonLayer = L.geoJSON(geoData, {
+    style: styleFeature,
+    onEachFeature
+  }).addTo(map);
+
+  setLoading(false);
+  updateSidebar();
+}
+
+function getFeatureNameRaw(props) {
+  // First try the auto-detected best key
+  if (geoNameKey && props[geoNameKey]) return props[geoNameKey];
+  // Fallback: try all candidate keys
+  for (const k of CANDIDATE_KEYS) {
+    if (props[k] && typeof props[k] === 'string' && props[k].trim()) return props[k].trim();
+  }
+  return null;
+}
+
+function styleFeature(feature) {
+  const raw    = getFeatureNameRaw(feature.properties || {});
+  const row    = lookupFeature(raw);
+  const hidden = row && hiddenGroups.has(row.salesperson);
+  return {
+    fillColor:   (row && !hidden) ? row.color : '#cccccc',
+    fillOpacity: (row && !hidden) ? TILES[currentTile].op : 0.08,
+    color: '#888',
+    weight: (row && !hidden) ? 0.9 : 0.2,
+  };
+}
+
+function onEachFeature(feature, layer) {
+  const raw = getFeatureNameRaw(feature.properties || {});
+  const row = lookupFeature(raw);
+
+  if (row) {
+    row.matched = true;
+    layer.bindPopup(`
+      <div class="popup-name">${raw}</div>
+      <div class="popup-row">Salesperson: <b>${row.salesperson}</b></div>
+      ${row.homebase ? `<div class="popup-row" style="font-size:10px;color:#94a3b8;margin-top:2px;">Homebase: ${row.homebase}</div>` : ''}
+      <span class="popup-badge" style="background:${row.color}">${row.salesperson}</span>
+    `, { maxWidth: 240 });
+  }
+
+  layer.on({
+    mouseover(e) {
+      if (row && hiddenGroups.has(row.salesperson)) return;
+      e.target.setStyle({ weight: 2.5, color: '#111', fillOpacity: row ? 0.92 : 0.18 });
+      if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) e.target.bringToFront();
+    },
+    mouseout(e) { geojsonLayer.resetStyle(e.target); }
+  });
+}
+
+// ── SIDEBAR UPDATE ────────────────────────────────────────────────────────────
+function updateSidebar() {
+  const seen = new Set();
+  const allEntries = Object.values(districtLookup).filter(r => {
+    const k = r.originalName + '|' + r.salesperson;
+    if (seen.has(k)) return false; seen.add(k); return true;
+  });
+
+  const matched   = allEntries.filter(r => r.matched);
+  const unmatched = allEntries.filter(r => !r.matched);
+
+  document.getElementById('s-mapped').textContent = matched.length;
+  document.getElementById('s-sales').textContent  = salesGroups.length;
+  document.getElementById('s-total').textContent  = allEntries.length;
+  const missEl = document.getElementById('s-miss');
+  missEl.textContent  = unmatched.length;
+  missEl.style.color  = unmatched.length > 0 ? 'var(--danger)' : 'var(--success)';
+
+  document.getElementById('map-pill').innerHTML =
+    `<b>${matched.length}</b> wilayah &nbsp;|&nbsp; ` +
+    `<b>${salesGroups.length}</b> salesperson &nbsp;|&nbsp; ` +
+    (unmatched.length > 0
+      ? `<b style="color:#ef4444">${unmatched.length}</b> tidak cocok`
+      : `<b style="color:#22c55e">semua cocok ✓</b>`);
+
+  document.getElementById('header-meta').textContent = matched.length + '/' + allEntries.length + ' wilayah';
+
+  // Legend
+  const ll = document.getElementById('legend-list');
+  ll.innerHTML = '';
+  salesGroups.forEach(g => {
+    const div = document.createElement('div');
+    div.className = 'leg-item' + (hiddenGroups.has(g.name) ? ' faded' : '');
+    div.innerHTML = `
+      <div class="leg-dot" style="background:${g.color}"></div>
+      <div style="flex:1;min-width:0">
+        <div class="leg-name">${g.name}</div>
+        ${g.homebase ? `<div class="leg-sub">${g.homebase}</div>` : ''}
+      </div>
+      <span class="leg-count">${g.areas.length}</span>`;
+    div.onclick = () => toggleGroup(g.name);
+    ll.appendChild(div);
+  });
+
+  // Unmatched warning
+  const ub = document.getElementById('unmatched-box');
+  const ul = document.getElementById('unmatched-list');
+  ul.innerHTML = '';
+  if (unmatched.length > 0) {
+    ub.style.display = 'block';
+    unmatched.forEach(r => {
+      const li = document.createElement('li');
+      li.textContent = r.originalName + ' (' + r.salesperson + ')';
+      ul.appendChild(li);
+    });
+  } else {
+    ub.style.display = 'none';
+  }
+}
+
+function toggleGroup(name) {
+  if (hiddenGroups.has(name)) hiddenGroups.delete(name);
+  else hiddenGroups.add(name);
+  if (geojsonLayer) geojsonLayer.setStyle(styleFeature);
+  updateSidebar();
+}
+
+// ── TILE SWITCHER ─────────────────────────────────────────────────────────────
+function switchTile(style, btn) {
+  if (style === currentTile) return;
+  currentTile = style;
+  document.querySelectorAll('.tbtn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  if (!map) return;
+  map.removeLayer(tileLayer);
+  tileLayer = L.tileLayer(TILES[style].url, {
+    attribution: ATTR, subdomains: TILES[style].sub, maxZoom: 19
+  }).addTo(map);
+  tileLayer.bringToBack();
+  if (geojsonLayer) geojsonLayer.setStyle(styleFeature);
+}
+
+// ── LOADING ───────────────────────────────────────────────────────────────────
+function setLoading(show, msg) {
+  document.getElementById('loading').className = show ? 'show' : '';
+  if (msg) document.getElementById('loading-msg').textContent = msg;
+}
+
+// ── FILE INPUT & DRAG-DROP ────────────────────────────────────────────────────
+document.getElementById('file-input').addEventListener('change', e => {
+  if (e.target.files[0]) parseExcel(e.target.files[0]);
+  e.target.value = '';
+});
+
+const dz = document.getElementById('drop-zone');
+dz.addEventListener('dragover',  e => { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) parseExcel(e.dataTransfer.files[0]);
+});
+document.getElementById('map-wrap').addEventListener('dragover', e => e.preventDefault());
+document.getElementById('map-wrap').addEventListener('drop', e => {
+  e.preventDefault();
+  if (e.dataTransfer.files[0]) parseExcel(e.dataTransfer.files[0]);
+});
+</script>
+</body>
+</html>
